@@ -42,14 +42,17 @@ async def run_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     LAST_CMD = cmd
     if process is None or process.poll() is not None:
-        process = subprocess.Popen(
-            LAST_CMD,
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid
-        )
-        await update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
+        try:
+            process = subprocess.Popen(
+                LAST_CMD,
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                preexec_fn=os.setsid
+            )
+            await update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Errore avvio comando:\n{e}")
     else:
         await update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
 
@@ -86,8 +89,7 @@ def main():
     app.add_handler(CommandHandler("stop", stop_command))
     app.add_handler(CommandHandler("status", status_command))
 
-    # PTB v20+ usa run_polling() invece di updater.start_polling()
-    app.run_polling()
+    app.run_polling()  # gestisce il loop e il polling automaticamente
 
 if __name__ == "__main__":
     main()
