@@ -6,31 +6,33 @@ import signal
 import socket
 
 # ================= CONFIG =================
-TOKEN = "8131285292:AAFkhGHNDzEJ4dxsnkq77AfeHmju5xDLyyk"
-AUTHORIZED_ID = 8131285292   # IL TUO chat_id
+TOKEN = "8131285292:AAFkhGHNDzEJ4dxsnkq77AfeHmju5xDLyyk"  # token del bot creato da BotFather
+AUTHORIZED_ID = 5699538596                  # tuo chat_id numerico
 # =========================================
 
 process = None
 LAST_CMD = None
 HOSTNAME = socket.gethostname()
 
+# ----- Funzione per creare la tastiera inline -----
+def get_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("▶️ START", callback_data="start")],
+        [InlineKeyboardButton("⛔ STOP", callback_data="stop")],
+        [InlineKeyboardButton("📊 STATUS", callback_data="status")]
+    ])
+
 # ----- Handler /start -----
 def start(update, context):
     if update.effective_user.id != AUTHORIZED_ID:
         return
 
-    keyboard = [
-        [InlineKeyboardButton("▶️ START", callback_data="start")],
-        [InlineKeyboardButton("⛔ STOP", callback_data="stop")],
-        [InlineKeyboardButton("📊 STATUS", callback_data="status")]
-    ]
-
     update.message.reply_text(
-        f"🤖 Bot attivo su: {HOSTNAME}\nScrivi il comando hping3 da eseguire e poi premi START.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        f"🤖 Bot attivo su: {HOSTNAME}\nScrivi il comando hping3 da eseguire e poi premi un pulsante:",
+        reply_markup=get_keyboard()
     )
 
-# ----- Handler dei pulsanti -----
+# ----- Handler pulsanti -----
 def buttons(update, context):
     global process, LAST_CMD
     query = update.callback_query
@@ -41,35 +43,39 @@ def buttons(update, context):
 
     if query.data == "start":
         if LAST_CMD is None:
-            query.edit_message_text("⚠️ Nessun comando hping3 impostato")
+            query.edit_message_text("⚠️ Nessun comando hping3 impostato", reply_markup=get_keyboard())
             return
+
         if process is None or process.poll() is not None:
-            process = subprocess.Popen(
-                LAST_CMD,
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid
-            )
-            query.edit_message_text(f"▶️ AVVIATO su {HOSTNAME}\nComando: {LAST_CMD}")
+            try:
+                process = subprocess.Popen(
+                    LAST_CMD,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    preexec_fn=os.setsid
+                )
+                query.edit_message_text(f"▶️ AVVIATO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
+            except Exception as e:
+                query.edit_message_text(f"❌ Errore avvio comando:\n{e}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"⚠️ Già in esecuzione su {HOSTNAME}")
+            query.edit_message_text(f"⚠️ Già in esecuzione su {HOSTNAME}", reply_markup=get_keyboard())
 
     elif query.data == "stop":
         if process and process.poll() is None:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             process = None
-            query.edit_message_text(f"⛔ FERMATO su {HOSTNAME}")
+            query.edit_message_text(f"⛔ FERMATO su {HOSTNAME}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"ℹ️ Nessun processo attivo su {HOSTNAME}")
+            query.edit_message_text(f"ℹ️ Nessun processo attivo su {HOSTNAME}", reply_markup=get_keyboard())
 
     elif query.data == "status":
         if process and process.poll() is None:
-            query.edit_message_text(f"🟢 ATTIVO su {HOSTNAME}\nComando: {LAST_CMD}")
+            query.edit_message_text(f"🟢 ATTIVO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"🔴 FERMO su {HOSTNAME}")
+            query.edit_message_text(f"🔴 FERMO su {HOSTNAME}", reply_markup=get_keyboard())
 
-# ----- Handler messaggi testo (comando hping3) -----
+# ----- Handler per ricevere comandi hping3 -----
 def receive_cmd(update, context):
     global LAST_CMD
     if update.effective_user.id != AUTHORIZED_ID:
@@ -77,10 +83,17 @@ def receive_cmd(update, context):
 
     text = update.message.text.strip()
     if text.startswith("hping3"):
-        LAST_CMD = text
-        update.message.reply_text("✅ Comando salvato. Premi ▶️ START per eseguirlo.")
+        # usa percorso completo di hping3
+        LAST_CMD = text.replace("hping3", "/usr/sbin/hping3", 1)
+        update.message.reply_text(
+            "✅ Comando salvato. Premi un pulsante per eseguirlo:",
+            reply_markup=get_keyboard()
+        )
     else:
-        update.message.reply_text("⚠️ Solo comandi hping3 sono permessi.")
+        update.message.reply_text(
+            "⚠️ Solo comandi hping3 sono permessi.",
+            reply_markup=get_keyboard()
+        )
 
 # ----- Main -----
 def main():
