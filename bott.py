@@ -1,4 +1,3 @@
-import asyncio
 import subprocess
 import os
 import signal
@@ -79,7 +78,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
 
 # ----- Main -----
-async def main():
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -87,9 +86,8 @@ async def main():
     app.add_handler(CommandHandler("stop", stop_command))
     app.add_handler(CommandHandler("status", status_command))
 
-    await app.start()
-    await app.updater.start_polling()
-    await asyncio.Event().wait()  # mantiene il bot in esecuzione
+    # PTB v20+ usa run_polling() invece di updater.start_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
