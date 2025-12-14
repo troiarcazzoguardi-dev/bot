@@ -1,12 +1,14 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import asyncio
 import subprocess
 import os
 import signal
 import socket
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # ================= CONFIG =================
-TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChu-jRZhBwz0Vw2CLI"  # inserisci il tuo token valido
-AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
+TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChu-jRZhBwz0Vw2CLI"
+AUTHORIZED_ID = 5699538596
 # =========================================
 
 process = None
@@ -14,31 +16,28 @@ LAST_CMD = None
 HOSTNAME = socket.gethostname()
 
 # ----- /start -----
-def start(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != AUTHORIZED_ID:
         return
-    update.message.reply_text(
+    await update.message.reply_text(
         f"🤖 Bot attivo su: {HOSTNAME}\n"
         "Usa /run ALL <comando> per eseguirlo su tutte le VNC attive.\n"
         "Puoi usare /stop per fermare e /status per verificare lo stato."
     )
 
 # ----- /run -----
-def run_command(update, context):
+async def run_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global process, LAST_CMD
     if update.effective_user.id != AUTHORIZED_ID:
         return
 
-    text = update.message.text.strip()
-    if not text.startswith("/run"):
+    if len(context.args) < 2:
+        await update.message.reply_text("⚠️ Formato corretto: /run ALL <comando>")
         return
 
-    parts = text.split(maxsplit=2)
-    if len(parts) < 3:
-        update.message.reply_text("⚠️ Formato corretto: /run ALL <comando>")
-        return
+    target = context.args[0]
+    cmd = " ".join(context.args[1:])
 
-    target, cmd = parts[1], parts[2]
     if target != "ALL" and target != HOSTNAME:
         return  # comando destinato ad altri nodi
 
@@ -51,12 +50,12 @@ def run_command(update, context):
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid
         )
-        update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
+        await update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
+        await update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
 
 # ----- /stop -----
-def stop_command(update, context):
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global process
     if update.effective_user.id != AUTHORIZED_ID:
         return
@@ -64,33 +63,33 @@ def stop_command(update, context):
     if process and process.poll() is None:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         process = None
-        update.message.reply_text(f"[{HOSTNAME}] ⛔ FERMATO")
+        await update.message.reply_text(f"[{HOSTNAME}] ⛔ FERMATO")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] ℹ️ Nessun processo attivo")
+        await update.message.reply_text(f"[{HOSTNAME}] ℹ️ Nessun processo attivo")
 
 # ----- /status -----
-def status_command(update, context):
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global process, LAST_CMD
     if update.effective_user.id != AUTHORIZED_ID:
         return
 
     if process and process.poll() is None:
-        update.message.reply_text(f"[{HOSTNAME}] 🟢 ATTIVO\nComando: {LAST_CMD}")
+        await update.message.reply_text(f"[{HOSTNAME}] 🟢 ATTIVO\nComando: {LAST_CMD}")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
+        await update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
 
 # ----- Main -----
-def main():
-    updater = Updater(TOKEN)
-    dp = updater.dispatcher
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("run", run_command))
-    dp.add_handler(CommandHandler("stop", stop_command))
-    dp.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("run", run_command))
+    app.add_handler(CommandHandler("stop", stop_command))
+    app.add_handler(CommandHandler("status", status_command))
 
-    updater.start_polling()
-    updater.idle()
+    await app.start()
+    await app.updater.start_polling()
+    await asyncio.Event().wait()  # mantiene il bot in esecuzione
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
