@@ -4,6 +4,8 @@ import signal
 import socket
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
 
 # ================= CONFIG =================
 TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChu-jRZhBwz0Vw2CLI"
@@ -13,6 +15,10 @@ AUTHORIZED_ID = 5699538596
 process = None
 LAST_CMD = None
 HOSTNAME = socket.gethostname()
+
+# ----- Scheduler con timezone esplicito -----
+scheduler = BackgroundScheduler(timezone=pytz.UTC)
+scheduler.start()
 
 # ----- /start -----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,14 +88,17 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ----- Main -----
 def main():
+    # Creazione bot
     app = ApplicationBuilder().token(TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("run", run_command))
     app.add_handler(CommandHandler("stop", stop_command))
     app.add_handler(CommandHandler("status", status_command))
 
-    app.run_polling()  # gestisce il loop e il polling automaticamente
+    # Avvio polling (gestisce il loop internamente)
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
