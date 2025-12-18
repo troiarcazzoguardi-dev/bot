@@ -10,7 +10,7 @@ import time
 import json
 
 # ================= CONFIG =================
-TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChujRZhBwz0Vw2CLI"
+TOKEN = "8583422659:AAH4nq8agp5urKtDU84jxVX0eZKKeUE9fOw"
 MASTER_ID = 5699538596
 AUTHORIZED_IDS_FILE = "authorized_ids.json"
 MONITOR_INTERVAL = 1
