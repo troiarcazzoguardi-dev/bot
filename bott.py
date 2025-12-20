@@ -1,88 +1,85 @@
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import subprocess
 import os
 import signal
 import socket
 
-TOKEN = "7857611131:AAExGDSgM7YkTZDDF-wA1_jOdCVFEXQ9buc"
-AUTHORIZED_ID = 5699538596
+# ================= CONFIG =================
+TOKEN = "8564716094:AAGx1zIGxkBPsxo97csjFI_EPQlmIYHaLz0"  # inserisci il tuo token valido
+AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
+# =========================================
 
 process = None
 LAST_CMD = None
 HOSTNAME = socket.gethostname()
 
-def auth(update):
-    return update.effective_user.id == AUTHORIZED_ID
-
+# ----- /start -----
 def start(update, context):
-    if not auth(update): return
+    if update.effective_user.id != AUTHORIZED_ID:
+        return
     update.message.reply_text(
-        f"🤖 Locust CLI bot su {HOSTNAME}\n"
-        "Uso:\n"
-        "/run ALL <parametri locust>\n"
-        "/stop\n"
-        "/status"
+        f"🤖 Bot attivo su: {HOSTNAME}\n"
+        "Usa /run ALL <comando> per eseguirlo su tutte le VNC attive.\n"
+        "Puoi usare /stop per fermare e /status per verificare lo stato."
     )
 
+# ----- /run -----
 def run_command(update, context):
     global process, LAST_CMD
-    if not auth(update): return
+    if update.effective_user.id != AUTHORIZED_ID:
+        return
 
     text = update.message.text.strip()
+    if not text.startswith("/run"):
+        return
+
     parts = text.split(maxsplit=2)
-
     if len(parts) < 3:
-        update.message.reply_text(
-            "⚠️ Uso corretto:\n"
-            "/run ALL --host https://example.com -u 100 -r 10 --run-time 5m"
-        )
+        update.message.reply_text("⚠️ Formato corretto: /run ALL <comando>")
         return
 
-    target, cli_args = parts[1], parts[2]
-
+    target, cmd = parts[1], parts[2]
     if target != "ALL" and target != HOSTNAME:
-        return
+        return  # comando destinato ad altri nodi
 
-    if process and process.poll() is None:
-        update.message.reply_text(f"[{HOSTNAME}] ⚠️ già in esecuzione")
-        return
+    LAST_CMD = cmd
+    if process is None or process.poll() is not None:
+        process = subprocess.Popen(
+            LAST_CMD,
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=os.setsid
+        )
+        update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
+    else:
+        update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
 
-    LAST_CMD = cli_args
-
-    process = subprocess.Popen(
-        LAST_CMD,
-        shell=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid
-    )
-
-    update.message.reply_text(
-        f"[{HOSTNAME}] ▶️ LOCUST AVVIATO\n"
-        f"Cmd: {LAST_CMD}"
-    )
-
+# ----- /stop -----
 def stop_command(update, context):
     global process
-    if not auth(update): return
+    if update.effective_user.id != AUTHORIZED_ID:
+        return
 
     if process and process.poll() is None:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         process = None
-        update.message.reply_text(f"[{HOSTNAME}] ⛔ fermato")
+        update.message.reply_text(f"[{HOSTNAME}] ⛔ FERMATO")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] ℹ️ nessun processo")
+        update.message.reply_text(f"[{HOSTNAME}] ℹ️ Nessun processo attivo")
 
+# ----- /status -----
 def status_command(update, context):
-    if not auth(update): return
+    global process, LAST_CMD
+    if update.effective_user.id != AUTHORIZED_ID:
+        return
 
     if process and process.poll() is None:
-        update.message.reply_text(
-            f"[{HOSTNAME}] 🟢 attivo\nCmd: {LAST_CMD}"
-        )
+        update.message.reply_text(f"[{HOSTNAME}] 🟢 ATTIVO\nComando: {LAST_CMD}")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] 🔴 fermo")
+        update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
 
+# ----- Main -----
 def main():
     updater = Updater(TOKEN)
     dp = updater.dispatcher
@@ -97,3 +94,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+ voglio fare questo ma per locust
