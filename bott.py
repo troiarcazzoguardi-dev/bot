@@ -1,85 +1,88 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler
 import subprocess
 import os
 import signal
 import socket
 
-# ================= CONFIG =================
-TOKEN = "8564716094:AAGx1zIGxkBPsxo97csjFI_EPQlmIYHaLz0"  # inserisci il tuo token valido
-AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
-# =========================================
+TOKEN = "7857611131:AAExGDSgM7YkTZDDF-wA1_jOdCVFEXQ9buc"
+AUTHORIZED_ID = 5699538596
 
 process = None
 LAST_CMD = None
 HOSTNAME = socket.gethostname()
 
-# ----- /start -----
+def auth(update):
+    return update.effective_user.id == AUTHORIZED_ID
+
 def start(update, context):
-    if update.effective_user.id != AUTHORIZED_ID:
-        return
+    if not auth(update): return
     update.message.reply_text(
-        f"🤖 Bot attivo su: {HOSTNAME}\n"
-        "Usa /run ALL <comando> per eseguirlo su tutte le VNC attive.\n"
-        "Puoi usare /stop per fermare e /status per verificare lo stato."
+        f"🤖 Locust CLI bot su {HOSTNAME}\n"
+        "Uso:\n"
+        "/run ALL <parametri locust>\n"
+        "/stop\n"
+        "/status"
     )
 
-# ----- /run -----
 def run_command(update, context):
     global process, LAST_CMD
-    if update.effective_user.id != AUTHORIZED_ID:
-        return
+    if not auth(update): return
 
     text = update.message.text.strip()
-    if not text.startswith("/run"):
-        return
-
     parts = text.split(maxsplit=2)
+
     if len(parts) < 3:
-        update.message.reply_text("⚠️ Formato corretto: /run ALL <comando>")
+        update.message.reply_text(
+            "⚠️ Uso corretto:\n"
+            "/run ALL --host https://example.com -u 100 -r 10 --run-time 5m"
+        )
         return
 
-    target, cmd = parts[1], parts[2]
+    target, cli_args = parts[1], parts[2]
+
     if target != "ALL" and target != HOSTNAME:
-        return  # comando destinato ad altri nodi
+        return
 
-    LAST_CMD = cmd
-    if process is None or process.poll() is not None:
-        process = subprocess.Popen(
-            LAST_CMD,
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid
-        )
-        update.message.reply_text(f"[{HOSTNAME}] ▶️ AVVIATO\nComando: {LAST_CMD}")
-    else:
-        update.message.reply_text(f"[{HOSTNAME}] ⚠️ Già in esecuzione")
+    if process and process.poll() is None:
+        update.message.reply_text(f"[{HOSTNAME}] ⚠️ già in esecuzione")
+        return
 
-# ----- /stop -----
+    LAST_CMD = cli_args
+
+    process = subprocess.Popen(
+        LAST_CMD,
+        shell=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        preexec_fn=os.setsid
+    )
+
+    update.message.reply_text(
+        f"[{HOSTNAME}] ▶️ LOCUST AVVIATO\n"
+        f"Cmd: {LAST_CMD}"
+    )
+
 def stop_command(update, context):
     global process
-    if update.effective_user.id != AUTHORIZED_ID:
-        return
+    if not auth(update): return
 
     if process and process.poll() is None:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         process = None
-        update.message.reply_text(f"[{HOSTNAME}] ⛔ FERMATO")
+        update.message.reply_text(f"[{HOSTNAME}] ⛔ fermato")
     else:
-        update.message.reply_text(f"[{HOSTNAME}] ℹ️ Nessun processo attivo")
+        update.message.reply_text(f"[{HOSTNAME}] ℹ️ nessun processo")
 
-# ----- /status -----
 def status_command(update, context):
-    global process, LAST_CMD
-    if update.effective_user.id != AUTHORIZED_ID:
-        return
+    if not auth(update): return
 
     if process and process.poll() is None:
-        update.message.reply_text(f"[{HOSTNAME}] 🟢 ATTIVO\nComando: {LAST_CMD}")
+        update.message.reply_text(
+            f"[{HOSTNAME}] 🟢 attivo\nCmd: {LAST_CMD}"
+        )
     else:
-        update.message.reply_text(f"[{HOSTNAME}] 🔴 FERMO")
+        update.message.reply_text(f"[{HOSTNAME}] 🔴 fermo")
 
-# ----- Main -----
 def main():
     updater = Updater(TOKEN)
     dp = updater.dispatcher
