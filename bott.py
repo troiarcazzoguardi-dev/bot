@@ -5,7 +5,7 @@ import signal
 import socket
 
 # ================= CONFIG =================
-TOKEN = "8564716094:AAGx1zIGxkBPsxo97csjFI_EPQlmIYHaLz0"  # inserisci il tuo token valido
+TOKEN = "8559838738:AAG-wJqdHdsNIOCTo0Sbglq4_U6ZMJ70-DQ"  # inserisci il tuo token valido
 AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
 # =========================================
 
@@ -94,5 +94,4 @@ def main():
 
 if __name__ == "__main__":
     main()
- voglio fare questo ma per locust
 
