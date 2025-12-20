@@ -5,7 +5,7 @@ import signal
 import socket
 
 # ================= CONFIG =================
-TOKEN = "8559838738:AAG-wJqdHdsNIOCTo0Sbglq4_U6ZMJ70-DQ"  # inserisci il tuo token valido
+TOKEN = "7857611131:AAExGDSgM7YkTZDDF-wA1_jOdCVFEXQ9buc"  # inserisci il tuo token valido
 AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
 # =========================================
 
