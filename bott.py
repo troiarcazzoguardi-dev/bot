@@ -1,3 +1,9 @@
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import subprocess
+import os
+import signal
+import socket
+
 # ================= CONFIG =================
 TOKEN = "from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import subprocess
