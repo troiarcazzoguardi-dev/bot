@@ -6,7 +6,7 @@ import signal
 import time
 
 # ---------- CONFIG ----------
-TOKEN = "8570385678:AAFQvkg_W2wAbGnaUOWhZLirmwXdP5RzgPI"
+TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
 AUTHORIZED_ID = 6972302166
 MAX_TIME = 600
 # ---------------------------
