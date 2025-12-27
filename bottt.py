@@ -19,7 +19,7 @@ import time
 import threading
 
 # ================= CONFIG =================
-TOKEN = "INSERISCI_TOKEN"
+TOKEN = "8511925925:AAGRxxH2-ZU0EciOezMA3ToEi2UxtUrIAW0"
 AUTHORIZED_ID = 5699538596
 MAX_DURATION = 600
 # =========================================
