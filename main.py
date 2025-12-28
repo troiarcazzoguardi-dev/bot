@@ -12,14 +12,15 @@ from telegram.ext import Updater, CommandHandler
 # ================= CONFIG =================
 TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
 AUTHORIZED_ID = 5699538596
+MAX_TIME = 600
 # =========================================
 
 process = None
 LAST_DESC = None
+is_running_flag = False
 progress_thread = None
 progress_stop_event = threading.Event()
 progress_message = None
-MAX_TIME = 600
 
 # ================= PRESET =================
 L7_PRESETS = {
@@ -36,20 +37,17 @@ L4_PRESETS = {
 def is_authorized(update):
     return update.effective_user.id == AUTHORIZED_ID
 
-def is_running():
-    return process is not None and process.poll() is None
-
 def kill_process():
-    global process
-    if is_running():
+    global process, is_running_flag
+    if process and process.poll() is None:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        process = None
+    process = None
+    is_running_flag = False
 
 # ================= PROGRESS BAR =================
 def progress_bar_loop(context, chat_id, duration):
-    global progress_message
+    global progress_message, is_running_flag
     start_time = time.time()
-
     while not progress_stop_event.is_set():
         elapsed = int(time.time() - start_time)
         remaining = duration - elapsed
@@ -61,11 +59,7 @@ def progress_bar_loop(context, chat_id, duration):
         blocks = int(percent / 5)  # 20 blocchi
         bar = "█" * blocks + "░" * (20 - blocks)
 
-        text = (
-            f"🟢 Test in esecuzione ({LAST_DESC})\n"
-            f"[{bar}] {percent}%\n"
-            f"⏱ {remaining}s rimanenti"
-        )
+        text = f"{LAST_DESC}\n[{bar}] {percent}% ⏱ {remaining}s rimanenti"
 
         try:
             progress_message.edit_text(text)
@@ -73,6 +67,7 @@ def progress_bar_loop(context, chat_id, duration):
             pass
 
         time.sleep(1)
+    is_running_flag = False
 
 # ================= COMMANDS =================
 def start(update, context):
@@ -90,10 +85,10 @@ def start(update, context):
 
 # ---------- L7 ----------
 def l7_command(update, context):
-    global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
+    global process, LAST_DESC, progress_thread, progress_stop_event, progress_message, is_running_flag
     if not is_authorized(update):
         return
-    if is_running():
+    if is_running_flag:
         update.message.reply_text("⚠️ Un test è già in esecuzione")
         return
     if not context.args:
@@ -125,12 +120,12 @@ def l7_command(update, context):
         update.message.reply_text("URL non valido")
         return
 
-    # Comando completo come stringa shell
     cmd_str = f"{preset['bin']} {preset['flags']} {url}"
     process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
-    LAST_DESC = f"L7 {method} → {url} : {tempo}s"
 
-    # Barra progresso
+    LAST_DESC = f"L7 {method} → {url} : {tempo}s"
+    is_running_flag = True
+
     progress_stop_event.clear()
     progress_message = update.message.reply_text(f"⏳ Avvio test L7 ({tempo}s)...")
     progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
@@ -138,10 +133,10 @@ def l7_command(update, context):
 
 # ---------- L4 ----------
 def l4_command(update, context):
-    global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
+    global process, LAST_DESC, progress_thread, progress_stop_event, progress_message, is_running_flag
     if not is_authorized(update):
         return
-    if is_running():
+    if is_running_flag:
         update.message.reply_text("⚠️ Un test è già in esecuzione")
         return
     if not context.args:
@@ -176,12 +171,12 @@ def l4_command(update, context):
         update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
         return
 
-    # Comando L4 come stringa shell
     cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)}"
     process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
-    LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
 
-    # Barra progresso
+    LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
+    is_running_flag = True
+
     progress_stop_event.clear()
     progress_message = update.message.reply_text(f"⏳ Avvio test L4 ({tempo}s)...")
     progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
@@ -191,7 +186,7 @@ def l4_command(update, context):
 def stop_command(update, context):
     if not is_authorized(update):
         return
-    if is_running():
+    if is_running_flag:
         progress_stop_event.set()
         kill_process()
         update.message.reply_text("⛔ Test fermato manualmente")
@@ -202,7 +197,7 @@ def stop_command(update, context):
 def status_command(update, context):
     if not is_authorized(update):
         return
-    if is_running():
+    if is_running_flag:
         update.message.reply_text(f"🟢 Test attivo\n{LAST_DESC}")
     else:
         update.message.reply_text("🔴 Nessun test attivo")
