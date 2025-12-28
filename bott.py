@@ -11,7 +11,7 @@ from telegram.ext import Updater, CommandHandler
 import shutil
 
 # ================= CONFIG =================
-TOKEN = "8299871950:AAGdNyZpk5DGniopvqMfIHDH14ERxf3Z4hE"
+TOKEN = "8511925925:AAGRxxH2-ZU0EciOezMA3ToEi2UxtUrIAW0"
 AUTHORIZED_ID = 5699538596
 MAX_TIME = 600
 # =========================================
