@@ -125,6 +125,7 @@ def l7_command(update, context):
         update.message.reply_text("URL non valido")
         return
 
+    # Costruzione comando L7 con URL corretto
     cmd_str = f"{preset['bin']} {preset['flags']} {url}"
     print(f"Eseguo comando L7: {cmd_str}")  # debug
 
@@ -186,7 +187,8 @@ def l4_command(update, context):
         update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
         return
 
-    cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)}"
+    # CORRETTO: aggiungere IP alla fine del comando
+    cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)} {ip}"
     print(f"Eseguo comando L4: {cmd_str}")  # debug
 
     try:
