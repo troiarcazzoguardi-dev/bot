@@ -30,7 +30,7 @@ L7_PRESETS = {
 }
 
 L4_PRESETS = {
-    "default": {"cmd": "hping3", "args": "-S -p {port} -d 9999 --flood"},
+    "default": {"cmd": "hping3", "args": "-S -p {port} -d 50000 --flood"},
     "fast": {"cmd": "tx_program", "args": "-p {port} -d 30 -t 600"}
 }
 
