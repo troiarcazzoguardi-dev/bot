@@ -11,7 +11,7 @@ from telegram.ext import Updater, CommandHandler
 import shutil
 
 # ================= CONFIG =================
-TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
+TOKEN = "8036771801:AAEZB4ekp5SmfhbU8CBzARuaP692AwWiiPM"
 AUTHORIZED_ID = 5699538596
 MAX_TIME = 600
 # =========================================
@@ -26,7 +26,7 @@ progress_message = None
 # ================= PRESET =================
 L7_PRESETS = {
     "basic": {"bin": "wrk", "flags": "-t30 -c100000 -d10m"},
-    "aggressive": {"bin": "h2load", "flags": "-n 10000 -c 100000 -t 30"}
+    "aggressive": {"bin": "h2load", "flags": "-n 150000 -c 150000 -t 30"}
 }
 
 L4_PRESETS = {
